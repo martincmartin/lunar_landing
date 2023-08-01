@@ -1,6 +1,6 @@
 // Compile using:
 //
-// clang++ -O3 -Werror -Wall -std=c++20 lunar.cpp
+// clang++ -O3 -ffast-math -Werror -Wall -Wextra -std=c++20 lunar.cpp
 
 /*
 Can we compute,
@@ -152,18 +152,17 @@ struct Lander {
   }
 };
 
-// "true" means on the moon.
-bool do_turn(const double fuel_rate, Lander &lander) {
+void do_turn(const double fuel_rate, Lander &lander) {
   double turn_time = 10.0;
   for (;;) {
     if (lander.fuel_empty()) {
       // printf("Out of fuel.\n");
       lander.update_when_out_of_fuel();
-      return true;
+      return;
     }
 
     if (turn_time < 0.001) {
-      return false;
+      return;
     }
 
     double elapsed = turn_time;
@@ -178,7 +177,7 @@ bool do_turn(const double fuel_rate, Lander &lander) {
 
     if (new_altitude <= 0) {
       lander.loop_until_on_the_moon(elapsed, fuel_rate, turn_time);
-      return true;
+      return;
     }
 
     if (lander.velocity > 0 && new_velocity < 0) {
@@ -204,7 +203,7 @@ bool do_turn(const double fuel_rate, Lander &lander) {
 
         if (new_altitude <= 0) {
           lander.loop_until_on_the_moon(elapsed, fuel_rate, turn_time);
-          return true;
+          return;
         }
         turn_time -= elapsed;
         lander.update(elapsed, new_altitude, new_velocity, fuel_rate);
@@ -219,30 +218,7 @@ bool do_turn(const double fuel_rate, Lander &lander) {
   }
 }
 
-struct Result {
-  bool on_moon;
-  double velocity_mph;
-  double fuel;
-  double time;
-  bool ran_out_of_fuel;
-};
-
-Lander do_run_up_to(const vector<double> &fuel_schedule, size_t num_iter) {
-  Lander lander;
-
-  for (size_t i = 0; i < num_iter; ++i) {
-    const double fuel_rate = fuel_schedule[i];
-    bool on_moon = do_turn(fuel_rate, lander);
-    if (on_moon) {
-      return lander;
-    }
-  }
-  return lander;
-}
-
-// TODO: Return Lander, and we can get rid of the Result struct as well as
-// do_run_up_to.
-Result do_run(const vector<double> &fuel_schedule, ssize_t max_iter = -1,
+Lander do_run(const vector<double> &fuel_schedule, ssize_t max_iter = -1,
               bool verbose = false) {
   Lander lander;
 
@@ -259,29 +235,23 @@ Result do_run(const vector<double> &fuel_schedule, ssize_t max_iter = -1,
     if (verbose) {
       lander.print(fuel_rate);
     }
-    bool on_moon = do_turn(fuel_rate, lander);
-    if (on_moon) {
-      // printf("ON MOON.\n");
+    do_turn(fuel_rate, lander);
+    if (lander.on_moon) {
       if (verbose) {
         lander.print_on_moon();
       }
-      return Result{true, lander.velocity_mph(), lander.fuel_weight(),
-                    lander.time, lander.ran_out_of_fuel()};
-    } else {
-      // printf("not on moon.\n");
+      return lander;
     }
   }
 
-  // What to do when schedule runs out?
-  return Result{false, lander.velocity_mph(), lander.fuel_weight(), lander.time,
-                lander.ran_out_of_fuel()};
+  return lander;
 }
 
 double last_fuel_brute_force(vector<double> &fuel_schedule) {
   double max_fuel = -1;
   double max_fuel_rate = -1;
 
-  const Lander lander{do_run_up_to(fuel_schedule, fuel_schedule.size() - 1)};
+  const Lander lander{do_run(fuel_schedule, fuel_schedule.size() - 1)};
 
   if (lander.on_moon) {
     fuel_schedule.back() = 0;
@@ -333,8 +303,8 @@ double nth_last_brute_force(vector<double> &fuel_schedule, int n) {
       fuel_schedule[i] = 200;
     }
 
-    Result result = do_run(fuel_schedule);
-    if (!result.ran_out_of_fuel && result.on_moon && result.velocity_mph > 1) {
+    const Lander lander = do_run(fuel_schedule);
+    if (!lander.ran_out_of_fuel() && lander.on_moon && lander.velocity_mph() > 1) {
       continue;
     }
 
